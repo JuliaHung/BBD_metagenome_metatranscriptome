@@ -1,0 +1,111 @@
+---
+title: "BBD day and night"
+author: "Julia Hung"
+output: pdf_document
+---
+
+load all the packages that I will need.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(DESeq2)
+library(tximport)
+library(ggplot2)
+library(pheatmap)
+library(RColorBrewer)
+library(topGO)
+library(ggrepel)
+library(scales)
+library(readxl)
+
+```
+**upload the data from hpc**
+```{bash non-rRNA, eval = FALSE}
+#use this in hpc login node
+# rsync -auvr --partial [D-N][1-5]_R[1-2].fastq.gz jc341271@rstudio.bioinformatics.guide:~/BBD_metagenome/day_night/raw_reads/
+
+```
+
+### Step 1: Aligh reads to the references
+using BBD mat genome bins from I generated with long-read seq
+
+```{bash, eval = FALSE}
+
+#cd ~/BBD_metagenome/
+
+#cat prokka/*/*.ffn day_night/genome_bins/BBD_combined_MAGs.ffn
+
+#direct to the genome bins files
+cd ~/BBD_metagenome/day_night/genome_bins/
+
+# create list of all the binings
+cat BBD_combined_MAGs.ffn | grep ^">" > BBD_bins_list_draft.txt
+#108926
+
+#find all the "S ribosomal" protein
+cat BBD_bins_list_draft.txt | grep "S ribosomal RNA" > BBD_bins_list_draft_rRNA.txt
+#1719
+cat BBD_bins_list_draft.txt | grep -v "S ribosomal RNA" > BBD_bins_list_draft_non-rRNA.txt 
+#107207 line
+
+#remove the "S ribosomal" reads and create the bin list
+#awk 'NR==FNR {exclude[$1]; next} /^>/ {found = ($1 in exclude)} !found' BBD_bins_list_draft_rRNA.txt BBD_combined_MAGs.ffn > BBD_combined_MAGs_filtered.ffn
+#cat BBD_combined_MAGs_filtered.ffn | grep ^">" > BBD_bins_list_draft_filtered.txt
+
+
+# grab all the names of the bins
+cat BBD_bins_list_draft.txt | grep -o '\<[A-Z][A-Z][A-Z][A-Z][A-Z][A-Z][A-Z][A-Z]_[0-9][0-9][0-9][0-9][0-9]\>' > BBD_bins_list.txt
+
+#make transcript-to-gene list
+
+sed 's/^\(.*\)/\1\t\1/' BBD_bins_list.txt > BBD_bins_transcript_gene.txt
+
+```
+
+
+```{bash bin-info}
+cd ~/BBD_metagenome/
+cp prokka/*/*.tsv day_night/genome_bins/bins_info/
+#import bins details
+BBD_bins_info <- read_tsv("~/BBD_metagenome/day_night/genome_bins/bins_info/bins_info.tsv")
+#import prokka id and taxa
+prokka_id <- read_excel("~/BBD_metagenome/day_night/prokka_id.xlsx")
+```
+
+```{bash}
+cd ~/BBD_metagenome/day_night/genome_bins/
+#awk '{ match($1, /^[A-Z]{8}_/); $2 = substr($1, RSTART, RLENGTH-1) }1' BBD_bins_list_filtered.txt > locus_tag_to_prokka_id.txt
+awk '{ match($1, /^[A-Z]{8}_/); $2 = substr($1, RSTART, RLENGTH-1) }1' BBD_bins_list.txt > locus_tag_to_prokka_id.txt
+
+```
+```{r}
+locus_tag_to_genome_id <- read_delim("~/BBD_metagenome/day_night/genome_bins/locus_tag_to_prokka_id.txt", col_names = c("locus_tag","prokka_id"))
+locus_tag_to_genome_id <- locus_tag_to_genome_id %>% left_join(prokka_id)
+#
+BBD_bins_info <- locus_tag_to_genome_id %>% 
+             left_join(BBD_bins_info) 
+```
+
+```{bash, eval = FALSE}
+# Generate a bowtie2 index for the references
+cd ~/BBD_metagenome/day_night/genome_bins/
+#rRNA filtered
+#rsem-prepare-reference --transcript-to-gene-map BBD_bins_transcript_gene_filtered.txt --bowtie2 -p 10 BBD_combined_MAGs_filtered.ffn BBD_combined_MAGs_filtered
+
+#rRNA included 
+rsem-prepare-reference --transcript-to-gene-map BBD_bins_transcript_gene.txt --bowtie2 -p 10 BBD_combined_MAGs.ffn BBD_combined_MAGs
+
+```
+
+
+**alignment reads to the referecnes**
+align RNA reads to the reference bins. Use the `RSEM` in bash environment to run the alignment and to could reads.
+use the the `rsem-calculate-expression` command-line to align reads and generate read counts. Codes below were used for a test of paths and settings.
+
+
+```{bash rsem, eval = FALSE}
+
+#cd ~/BBD_metagenome/day_night/
+nohup ./01_rsem_align.sh > 01_rsem_align.log &
+```
