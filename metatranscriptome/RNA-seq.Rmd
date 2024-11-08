@@ -105,7 +105,205 @@ use the the `rsem-calculate-expression` command-line to align reads and generate
 
 
 ```{bash rsem, eval = FALSE}
-
 #cd ~/BBD_metagenome/day_night/
 nohup ./01_rsem_align.sh > 01_rsem_align.log &
+```
+
+### Step 2: Import RSEM results to DESeq2
+After the piared raw reads has all aligned to the reference and generated read counts with `rsem`, transfer the alignment files to the `R` environment for downstream differential expression analysis using `DESeq2` package.
+
+**Convert RSEM with tximport**
+The `tximport` package was used for importing the `rsem` data to the `DESeq2` objects.
+```{r tximport}
+library("tximport")
+
+#create the vector contains all the aligned gene files
+aligned_genes_results <- list.files("rsem/", pattern = "*.genes.results", full.names = TRUE)
+# add a column for sample name and treatment group
+names(aligned_genes_results) <- basename(aligned_genes_results) %>% str_extract("[D-N][1-5]")
+#import the aligned genes files to the tximport 
+txi_genes <- tximport(aligned_genes_results, type = "rsem", txIn = FALSE, txOut = FALSE)
+```
+```{r length>0}
+# make sure all the gene has read length >0
+txi_genes$length[txi_genes$length==0] <- 1
+```
+
+**Import sample metadata**
+
+Before we create a `DESeq2` dataset, I created a `R` object for sample metadata. 
+```{r meta-data}
+#create experiment factor table 
+sample_metadata <- read.table("sample_metadata.txt", header = TRUE, sep=",")
+sample_table <- data.frame(SampleID = str_extract(names(aligned_genes_results), pattern = "[D-N][1-5]"),
+                           treatment = factor(sample_metadata$sampling_time, levels = c("day", "night")),
+                           colony = factor(sample_metadata$coral_colony, levels = c("colony_1","colony_2","colony_3","colony_4","colony_5")))
+#generated a saved object in cache for the report result part
+#write_rds(sample_table,file = "cache/sample_table.rds")
+```
+
+
+**Create a DESeq2 dataset**
+All the statistical analysis for evaluate gene expression levels were performed using `DESeq2` package. Use the `DESeqDataSetFromTximport` function to generate the convert `tximport` object to `DESeq2` object.
+```{r import-2-deseq}
+#construct a DESeqDataSet from the txi_genes object and sample information in samples
+ddstxi <- DESeqDataSetFromTximport(txi_genes,
+                                   sample_table,
+                                   ~treatment)
+```
+
+export raw read counts
+```{r raow-read-counts}
+#export original raw_read counts
+raw_readcount<- assay(ddstxi) %>%
+  as.data.frame() 
+
+# Drop rows where all columns have 0 reads (sum of the row = zero)
+raw_readcount <- raw_readcount[rowSums(raw_readcount[, ]) != 0, ] 
+#
+raw_readcount$locus_tag <- rownames(raw_readcount)
+raw_readcount <- raw_readcount %>% left_join(BBD_bins_info)
+```
+
+***exclude rRNA and low read counts genes**
+
+filter out low read counts
+https://support.bioconductor.org/p/65256/
+
+```{r pre-filter DE-seq}
+raw_readcount_non_rRNA <- raw_readcount %>% filter(ftype !="rRNA") %>% filter(!grepl("ribosomal protein", product))
+non_rRNA <- raw_readcount_non_rRNA$locus_tag
+
+###### 
+#dds <- estimateSizeFactors(ddstxi)
+#filter out genes with read counts less than 10 in 3 samples
+#keep <- rowSums( counts(dds,normalize=TRUE) >= 10 ) >= 3
+#dds_filtered <- dds[keep,]
+
+#filtered out rRNA (only keep the ones match the non-rRNA list)
+#dds_filtered <- dds_filtered[rownames(dds_filtered) %in% non_rRNA]
+
+#####
+ddstxi_nz <- ddstxi[rowSums(counts(ddstxi)>=10)>=3,]
+dds_filtered <- ddstxi_nz[rownames(ddstxi_nz) %in% non_rRNA]
+
+#
+readcounts_filtered <-assay(dds_filtered)%>%
+  as.data.frame() 
+```
+
+### Step 3: Differential expression analysis
+
+**DESeq model fitting**
+By using the `deseq` function, DESeq2 normalized the counts, estimated the size factors, estimated of dispersion, and performed the negative binomial GLM fitting and Wald statistics.
+```{r deseq}
+#fitting model
+dds_deseq <- DESeq(dds_filtered)
+```
+
+**Variance stabilizing transformation**
+This function calculates a variance stabilizing transformation (VST) from the fitted dispersion-mean relation(s) and then transforms the count data (normalized by division by the size factors or normalization factors), yielding a matrix of values which are now approximately homoskedastic (having constant variance along the range of mean values). The transformation also normalizes with respect to library size.
+
+I use the `varianceStabilizingTransformation` function to further normalized the count data. 
+```{r vst}
+vst <- varianceStabilizingTransformation(dds_deseq)
+```
+
+**Extract differentially expressed genes**
+After fitting model, Us ethe `results` function to generate a result table that includes base means across samples, log2 fold changes, standard errors, test statistics, p-values and adjested p-values
+
+```{r DESeq result}
+#inspect the names of the estimated effects (co-efficient) of the model
+resultsNames(dds_deseq)
+
+#[1] "Intercept"                   "treatment_night_vs_day"      
+
+#generate result table
+res <- results(dds_deseq, name = "treatment_night_vs_day")
+
+```
+
+The significantly differentially expressed genes (DE genes) were extracted with adjusted p-value cut-off ≤0.05 due to a false discovery ratio of 5%
+```{r DE genes}
+DEgenes <- res %>%
+  na.omit() %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  arrange(padj)%>%
+  filter(padj<0.05)%>%
+  left_join(BBD_bins_info, by=c("gene_id"="locus_tag") ) %>%
+  left_join(mag_id, join_by("prokka_id")) 
+
+# Replace "file.txt" with the path to your file
+#KO_number <- read.delim("user_ko.txt", header = F, sep = "", stringsAsFactors = FALSE)
+#colnames(KO_number) <- c("gene_id","ko")
+
+DEgenes <- DEgenes %>%
+  left_join(KO_number)
+
+write_tsv(DEgenes, file = "DEgenes.tsv")
+```
+
+## Enrichment analysis 
+
+**create TopGO objects**
+
+https://bioconductor.org/packages/devel/bioc/vignettes/topGO/inst/doc/topGO.pdf
+
+what TopGO object I will need to perform K-S test
+1.custom annotations
+2.gene score.ranking  (predefined intereested gene for Fisher's test)
+3.topGOdata
+
+```{r go-objects}
+#create GO term objects
+gene_ids <- DEG_GO$gene_id
+gostrings <- DEG_GO$GO_terms
+
+
+#convert the ; separated strings for each gene into a vector and make these into a named list where the names are the gene ids
+gostring2vector <-function(gostrings){
+  str_split(gostrings, ";")[[1]] %>%str_trim()
+}
+
+geneID2GO <- lapply(gostrings,gostring2vector)
+names(geneID2GO) <- gene_ids
+
+```
+
+```{r}
+#extract the signification gene id
+
+DEG_GO_gene <- DEG_GO %>% 
+  filter(padj<0.01) %>%
+  pull(gene_id) #extract the gene id
+#got 398 genes to target on for over-representation enrichment analysis
+
+
+#construct list of "target_GO" list, indicate whether the gene is on our target list
+#names are gene_ids but the values are TRUE or FALSE indicating whether that gene is part of the target set
+target_GO <- factor(as.integer(gene_ids %in% DEG_GO_gene))
+names(target_GO) <- gene_ids
+```
+
+
+
+**Over-representation Enrichment analysis**
+
+```{r fisher-BP}
+#construct topGO data object
+GOdata_BP <- new("topGOdata", 
+                  ontology = "BP", #looking at "biological process"
+                  allGenes = target_GO, 
+                  annot = annFUN.gene2GO, 
+                  gene2GO = geneID2GO,
+                  nodeSize = 5) #control allowing nodes
+
+#fisher's exact test
+# This runs the test to see if there are significantly enriched GO terms
+resultFisBP <- runTest(GOdata_BP, algorithm = "weight01", statistic = "fisher")
+#1418 GO terms scored: 4 terms with p < 0.01
+
+# This extracts test results into a table
+Fishers_BP <- GenTable(GOdata_BP, classic = resultFisBP, orderBy = "weight", ranksOf = "classic", topNodes = 50)   
 ```
