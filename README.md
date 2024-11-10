@@ -19,4 +19,5 @@ The script used to recover MAGs is in the "metagenome" folder, and the workflow 
 <br/>
 
 **Metagenome-assembled genomes (MAGs) recovered using Oxford Nanopore long-read sequencing:**
+
 The script used to perform differential gene expression analysis of BBD lesions during daytime and nighttime is in the "metatranscriptome" folder.
