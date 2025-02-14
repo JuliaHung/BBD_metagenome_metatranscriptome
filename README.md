@@ -11,11 +11,9 @@ Repository for scripts and resources of (1) recovering near-complete metagenome-
 
 The recovered 28 BBD-derived, near-complete MAGs from this study are available at [figshare](https://doi.org/10.6084/m9.figshare.27611787).
 
-The script used to recover MAGs is in the "metagenome" folder, and the workflow as show here.
+The script used to recover MAGs is in the "metagenome" folder, and the workflow as showed here.
 
-![workflow2](https://github.com/user-attachments/assets/0b788388-a878-445b-8b88-ea08b15f9954)
-
-<img src="https://github.com/user-attachments/assets/0b788388-a878-445b-8b88-ea08b15f9954" width="50">
+<img src="https://github.com/user-attachments/assets/0b788388-a878-445b-8b88-ea08b15f9954" width="200">
 
 
 <br/>
