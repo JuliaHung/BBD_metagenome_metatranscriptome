@@ -13,7 +13,7 @@ The recovered 28 BBD-derived, near-complete MAGs from this study are available a
 
 The script used to recover MAGs is in the "metagenome" folder, and the workflow as showed here.
 
-<img src="https://github.com/user-attachments/assets/0b788388-a878-445b-8b88-ea08b15f9954" width="200">
+<img src="https://github.com/user-attachments/assets/0b788388-a878-445b-8b88-ea08b15f9954" width="500">
 
 
 <br/>
