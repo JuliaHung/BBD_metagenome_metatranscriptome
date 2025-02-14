@@ -15,6 +15,9 @@ The script used to recover MAGs is in the "metagenome" folder, and the workflow 
 
 ![workflow2](https://github.com/user-attachments/assets/0b788388-a878-445b-8b88-ea08b15f9954)
 
+<img src="https://github.com/user-attachments/assets/0b788388-a878-445b-8b88-ea08b15f9954" width="50">
+
+
 <br/>
 <br/>
 
