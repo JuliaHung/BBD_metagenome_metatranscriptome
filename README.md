@@ -1,7 +1,6 @@
 # BBD_metagenome_metatranscriptome
 <br/>
 
- **Description:**
 Repository containing scripts and resources for two main analyses:
 
 1. Metagenome (in the metagenome folder): Recovery of near-complete metagenome-assembled genomes (MAGs) from coral Black Band Disease (BBD) lesions using Oxford Nanopore long-read sequencing data.
