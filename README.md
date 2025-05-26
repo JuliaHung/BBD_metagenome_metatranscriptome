@@ -2,7 +2,11 @@
 <br/>
 
  **Description:**
-Repository for scripts and resources of (1) recovering near-complete metagenome-assembled genomes (MAGs) from coral Black Band Disease (BBD) lesion using Oxford nanopore long-read sequencing data, and (2) comparing microbial gene expression under different light regimes using differential gene expression analysis.
+Repository containing scripts and resources for two main analyses:
+
+1. Metagenome (in the metagenome folder): Recovery of near-complete metagenome-assembled genomes (MAGs) from coral Black Band Disease (BBD) lesions using Oxford Nanopore long-read sequencing data.
+
+2. Metatranscriptome (in the metatranscriptome folder): Comparison of microbial gene expression under different light conditions using differential gene expression analysis.
 <br/>
 <br/>
 
